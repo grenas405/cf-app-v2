@@ -9,8 +9,7 @@
 [![Bun 1.3 or later](docs/assets/badges/bun.svg)](https://bun.sh)
 [![Node.js 24 or later](docs/assets/badges/node.svg)](https://nodejs.org)
 [![Cloudflare Workers with D1](docs/assets/badges/cloudflare-workers.svg)](https://workers.cloudflare.com)
-<br/>
-[![TypeScript strict](docs/assets/badges/typescript.svg)](https://www.typescriptlang.org)
+<br/> [![TypeScript strict](docs/assets/badges/typescript.svg)](https://www.typescriptlang.org)
 [![zod 4](docs/assets/badges/zod.svg)](https://zod.dev)
 [![Tailwind CSS 4](docs/assets/badges/tailwindcss.svg)](https://tailwindcss.com)
 [![License: MIT](docs/assets/badges/license.svg)](LICENSE)
