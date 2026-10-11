@@ -1,0 +1,31 @@
+{
+  // Cloudflare Workers configuration for src/adapters/worker.ts.
+  // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+  "name": "cf-app-v2",
+  "main": "src/adapters/worker.ts",
+  "compatibility_date": "2026-09-01",
+
+  // Static files from ./public, read by the app through the ASSETS binding.
+  // run_worker_first routes every request through the app, so static files
+  // get the same security headers, rate limiting and path checks.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+
+  // Create with: npx wrangler@4 kv namespace create USERS_KV
+  "kv_namespaces": [
+    { "binding": "USERS_KV", "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }
+  ],
+
+  // Non-secret config. Set secrets with: npx wrangler@4 secret put ADMIN_TOKEN
+  "vars": {
+    "LOG_LEVEL": "info",
+    "CORS_ORIGINS": ""
+  },
+
+  "observability": { "enabled": true }
+}

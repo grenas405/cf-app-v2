@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Build output (regenerate with `deno task build:css` or `npm run build:css`)
+public/styles.css
+dist/
+
+# Local tooling state
+.wrangler/
+.dev.vars
+.env
+*.log

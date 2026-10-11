@@ -1,0 +1,29 @@
+{
+  "name": "cf-app-v2",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runtime-agnostic HTTP server starter: a pure (Request) => Promise<Response> core with thin Deno, Bun, Node and Cloudflare Workers adapters.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24",
+    "bun": ">=1.3"
+  },
+  "scripts": {
+    "build:css": "tailwindcss -i ./frontend/styles.css -o ./public/styles.css --minify",
+    "watch:css": "tailwindcss -i ./frontend/styles.css -o ./public/styles.css --watch=always",
+    "start:bun": "bun run build:css && bun src/adapters/bun.ts",
+    "start:node": "npm run build:css && node src/adapters/node.ts",
+    "dev:bun": "bun run build:css && (bun run watch:css & bun --watch src/adapters/bun.ts)",
+    "dev:node": "npm run build:css && (npm run watch:css & node --watch src/adapters/node.ts)",
+    "dev:worker": "npm run build:css && npx wrangler@4 dev",
+    "deploy:worker": "npm run build:css && npx wrangler@4 deploy"
+  },
+  "dependencies": {
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14"
+  }
+}

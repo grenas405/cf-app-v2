@@ -1,0 +1,51 @@
+{
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.19"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true
+  },
+  "tasks": {
+    "dev": {
+      "description": "Watch mode: rebuild CSS and restart the Deno server on changes",
+      "dependencies": ["dev:css", "dev:server"]
+    },
+    "dev:css": {
+      "description": "Rebuild public/styles.css whenever the HTML, JS or CSS entry changes",
+      "command": "deno run --allow-read --allow-write=public --allow-env --allow-sys --allow-ffi npm:@tailwindcss/cli -i ./frontend/styles.css -o ./public/styles.css --watch=always"
+    },
+    "dev:server": {
+      "description": "Run the Deno adapter, restarting on source changes",
+      "command": "deno run --watch --unstable-kv --unstable-no-legacy-abort --allow-net --allow-env --allow-read=public src/adapters/deno.ts"
+    },
+    "start": {
+      "description": "Build CSS once, then run the Deno adapter",
+      "command": "deno run --unstable-kv --unstable-no-legacy-abort --allow-net --allow-env --allow-read=public src/adapters/deno.ts",
+      "dependencies": ["build:css"]
+    },
+    "build:css": {
+      "description": "Compile frontend/styles.css with the Tailwind CLI into public/styles.css",
+      "command": "deno run --allow-read --allow-write=public --allow-env --allow-sys --allow-ffi npm:@tailwindcss/cli -i ./frontend/styles.css -o ./public/styles.css --minify"
+    },
+    "test": {
+      "description": "Run the core tests (no permissions: the app does no I/O of its own)",
+      "command": "deno test tests/"
+    },
+    "check": {
+      "description": "Type-check the server, all four adapters, the tests and the frontend JS",
+      "command": "deno check src/ tests/ public/app.js public/lib.js"
+    },
+    "lint": {
+      "description": "Lint and check formatting",
+      "command": "deno lint && deno fmt --check"
+    }
+  },
+  "fmt": {
+    "lineWidth": 120
+  },
+  "exclude": ["public/styles.css", ".wrangler/", "dist/"]
+}

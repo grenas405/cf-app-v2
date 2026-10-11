@@ -1,0 +1,11 @@
+/*
+ * Tailwind CSS v4 entry point, compiled at build time to public/styles.css:
+ *   deno task build:css    (or: npm run build:css)
+ *
+ * Automatic source detection is off; classes are only collected from the
+ * files listed here, so the output contains exactly what the page uses.
+ */
+@import "tailwindcss" source(none);
+
+@source "../public/index.html";
+@source "../public/app.js";
