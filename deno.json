@@ -45,7 +45,8 @@
     }
   },
   "fmt": {
-    "lineWidth": 120
+    "lineWidth": 120,
+    "exclude": ["docs/assets/"]
   },
   "exclude": ["public/styles.css", ".wrangler/", "dist/"]
 }

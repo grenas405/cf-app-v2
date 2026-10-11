@@ -1,92 +1,116 @@
-# cf-app-v2
+<div align="center">
 
-A small, runtime-agnostic HTTP server starter in TypeScript. The whole application is one function:
+<img src="docs/assets/banner.svg" alt="cf-app-v2: one Web-standard handler running on Deno, Bun, Node.js and Cloudflare Workers" width="100%">
 
-```ts
-type Handler = (req: Request) => Promise<Response>;
-```
+<br/>
+<br/>
 
-It is built only on Web standard APIs (Fetch, URL, URLPattern, Headers, ReadableStream, TextEncoder, `crypto.subtle`)
-and runs unchanged on **Deno**, **Bun**, **Node** (`node:http`) and **Cloudflare Workers**. A minimal frontend, styled
-with Tailwind CSS v4, is served by the same server.
+[![Deno](https://img.shields.io/badge/Deno-2.x-000000?style=flat-square&logo=deno&logoColor=white)](https://deno.com)
+[![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.3-14151A?style=flat-square&logo=bun&logoColor=FBF0DF)](https://bun.sh)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A524-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-D1-F38020?style=flat-square&logo=cloudflareworkers&logoColor=white)](https://workers.cloudflare.com)
+<br/>
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![zod](https://img.shields.io/badge/zod-4-408AFF?style=flat-square&logo=zod&logoColor=white)](https://zod.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-22C55E?style=flat-square)](LICENSE)
 
-The only runtime dependency is [zod](https://zod.dev). Tailwind is a build-time dependency.
+**A small, production-minded HTTP server starter in TypeScript.**<br/> One pure, Web-standard handler that runs
+unchanged on four runtimes, with a Tailwind CSS frontend,<br/> OWASP-aligned defaults, and 145 tests that need no
+server, no network and no permissions.
+
+[Quick start](#quick-start) · [Architecture](#architecture) · [API](#api) · [Security](#security) ·
+[Deployment](#deployment) · [Configuration](#configuration)
+
+</div>
+
+---
+
+## Highlights
+
+- **One handler, four runtimes.** The whole app is `(req: Request) => Promise<Response>`, built only on Web standards
+  (Fetch, URL, URLPattern, Headers, ReadableStream, TextEncoder, `crypto.subtle`). Each runtime gets one thin adapter
+  file.
+- **Side effects at the edges.** Storage, logging, time, randomness and file reads are injected through a single `Deps`
+  object. The core is plain functions and plain data: no classes, no decorators, no framework.
+- **Secure by default.** Strict CSP, allowlist validation with zod, body-size limits before parsing, exact-origin CORS,
+  rate limiting, constant-time token checks, and no stack traces in responses.
+- **Tested without a server.** Tests call `app(new Request(...))` directly with in-memory fakes. The D1 store's SQL runs
+  against real SQLite.
+- **Live, framework-free UI.** A Tailwind CSS v4 page with server-sent events and no inline scripts or styles. User data
+  is only ever written with `textContent`.
+- **A tiny dependency surface.** [zod](https://zod.dev) at runtime and Tailwind at build time. Nothing else.
 
 ## Quick start
 
-```sh
-deno task dev                          # Deno: CSS watcher + auto-restarting server on :8000
-npm install && npm run dev:node        # Node >= 24
-bun install && bun run dev:bun         # Bun >= 1.3
-npm install && npm run dev:worker      # Cloudflare Workers (wrangler dev)
+<table>
+  <tr>
+    <th align="center"><img src="docs/assets/runtimes/deno.svg" width="56" alt=""><br/>Deno <sub>2.x</sub></th>
+    <th align="center"><img src="docs/assets/runtimes/bun.svg" width="56" alt=""><br/>Bun <sub>≥ 1.3</sub></th>
+    <th align="center"><img src="docs/assets/runtimes/node.svg" width="56" alt=""><br/>Node.js <sub>≥ 24</sub></th>
+    <th align="center"><img src="docs/assets/runtimes/cloudflare-workers.svg" width="56" alt=""><br/>Cloudflare Workers</th>
+  </tr>
+  <tr>
+    <td><code>deno task dev</code></td>
+    <td><code>bun install</code><br/><code>bun run dev:bun</code></td>
+    <td><code>npm install</code><br/><code>npm run dev:node</code></td>
+    <td><code>npm install</code><br/><code>npm run dev:worker</code></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Deno KV</sub></td>
+    <td align="center"><sub>in-memory</sub></td>
+    <td align="center"><sub>in-memory</sub></td>
+    <td align="center"><sub>D1 (SQLite)</sub></td>
+  </tr>
+</table>
+
+Then open <http://127.0.0.1:8000> (Workers: <http://127.0.0.1:8787>). Every `dev` script runs the Tailwind watcher
+alongside an auto-restarting server.
+
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph adapters["Adapters: the only runtime-specific code"]
+    direction LR
+    deno["<b>Deno</b><br/>Deno.serve · Deno KV"]
+    bun["<b>Bun</b><br/>Bun.serve · in-memory"]
+    node["<b>Node.js</b><br/>node:http · in-memory"]
+    workers["<b>Cloudflare Workers</b><br/>fetch handler · D1"]
+    deno ~~~ bun ~~~ node ~~~ workers
+  end
+
+  subgraph core["Runtime-agnostic core: createApp(deps)"]
+    direction LR
+    mw["<b>Middleware</b><br/>headers · logging · errors · CORS<br/>timeout · rate limit · body limit"]
+    router["<b>Router</b><br/>URLPattern, routes as data"]
+    routes["<b>Routes</b><br/>/health · /users · /events · static"]
+    mw --> router --> routes
+  end
+
+  adapters -- "Request in, Response out" --> core
+  adapters -. "inject Deps: config · users · logger · clock · newId · events · readStatic" .-> core
 ```
-
-Open <http://127.0.0.1:8000> (Workers: <http://127.0.0.1:8787>). Configuration comes from environment variables; see
-[Configuration](#configuration).
-
-## Layout
-
-```
-src/
-  core/                  runtime-agnostic, no side effects of its own
-    types.ts             Handler, Middleware, Deps and the storage/clock/logger interfaces
-    router.ts            URLPattern router: routes are data, matching is a pure function
-    middleware.ts        compose + logger, error boundary, CORS, security headers,
-                         timeout, rate limit, body limit, auth hook
-    http.ts              pure response helpers (json, text, notFound, badRequest, …)
-    validate.ts          zod helpers: parseJson / parseQuery / parseParams → Result
-    static.ts            path sanitizing, Content-Type, cache headers, ETags
-    config.ts            the config schema, parsed once at startup
-    auth.ts, crypto.ts, log.ts, request.ts, sse.ts
-  routes/                one file per concern: users, events (SSE), static, health
-  users.ts               user schemas (types come from z.infer), the UserStore interface,
-                         and its KV-backed implementation
-  stores/memory.ts       in-memory KV, rate-limit counters and event bus
-  app.ts                 createApp(deps): wires routes and middleware
-  adapters/
-    deno.ts bun.ts node.ts worker.ts   the only files with runtime-specific code
-    common.ts            shared adapter helpers (Web-standard globals only)
-public/                  served as-is: index.html, app.js, lib.js, favicon.svg, styles.css (built)
-frontend/styles.css      Tailwind entry point
-tests/                   Deno tests that call app(new Request(...)) directly; D1 runs on
-                         in-memory SQLite (tests/d1_sqlite.ts)
-```
-
-## The core/adapter split
 
 `createApp(deps)` returns the handler. It imports nothing runtime-specific, so the same code runs everywhere and in
-tests.
+tests. Each adapter does exactly three things:
 
-Each adapter is a thin entry point that does exactly three things:
-
-1. **Reads and validates config** with the shared zod schema, and exits loudly (Workers: answers 500 and logs) on
-   invalid values. Error messages name the key and never echo its value.
-2. **Builds real dependencies**: storage, a log writer, `readStatic`, and the clock, timers and id generator.
-3. **Starts the server** and converts between the platform and Fetch `Request`/`Response` where needed (Node).
+1. **Validates config** with the shared zod schema and fails loudly on bad values. Error messages name the key and never
+   echo its value.
+2. **Builds the real dependencies**: user storage, a log writer, `readStatic`, the clock and timers, and the id
+   generator.
+3. **Starts the server**, converting between the platform and Fetch `Request`/`Response` where needed (Node).
 
 Anything that mentions `Deno.`, `Bun.`, `process` or `node:` lives only in `src/adapters/`.
 
-| Runtime | User storage         | Static files       | Client IP from             |
-| ------- | -------------------- | ------------------ | -------------------------- |
-| Deno    | Deno KV (persistent) | `Deno.readFile`    | `info.remoteAddr`          |
-| Bun     | in-memory            | `Bun.file`         | `server.requestIP()`       |
-| Node    | in-memory            | `node:fs/promises` | `req.socket.remoteAddress` |
-| Workers | D1 database `DB`     | `ASSETS` binding   | `CF-Connecting-IP`         |
+| Runtime                                                                                      | User storage     | Static files       | Client IP from             |
+| -------------------------------------------------------------------------------------------- | ---------------- | ------------------ | -------------------------- |
+| <img src="docs/assets/runtimes/deno.svg" width="16" alt=""> Deno                             | Deno KV          | `Deno.readFile`    | `info.remoteAddr`          |
+| <img src="docs/assets/runtimes/bun.svg" width="16" alt=""> Bun                               | in-memory        | `Bun.file`         | `server.requestIP()`       |
+| <img src="docs/assets/runtimes/node.svg" width="16" alt=""> Node.js                          | in-memory        | `node:fs/promises` | `req.socket.remoteAddress` |
+| <img src="docs/assets/runtimes/cloudflare-workers.svg" width="16" alt=""> Cloudflare Workers | D1 database `DB` | `ASSETS` binding   | `CF-Connecting-IP`         |
 
-Routes depend only on the four-method `UserStore` interface (`create`, `find`, `listNewest`, `delete`). There are two
-implementations:
-
-- `createKvUserStore(kv)` in `src/users.ts` works on any `KvStore`. It keeps a newest-first index key for listing, and
-  claims each email with an atomic `setIfAbsent`.
-- `createD1UserStore(db)` in `src/adapters/worker.ts` uses SQL. A `UNIQUE` email column enforces uniqueness, and
-  `ORDER BY ... LIMIT` handles listing. The `users` table is created on first use with `CREATE TABLE IF NOT EXISTS`.
-  Move to `wrangler d1 migrations` once the schema needs to change.
-
-Emails are unique regardless of case on every runtime; a duplicate gets `409 Conflict`. To use Redis, Postgres or
-anything else, implement `KvStore` (four methods plus `setIfAbsent`) or `UserStore` in the adapter. Nothing else
-changes.
-
-## Side effects at the edges
+### Side effects at the edges
 
 The core takes inputs and returns outputs. Everything that touches the outside world arrives through `Deps`:
 
@@ -104,39 +128,81 @@ interface Deps {
 ```
 
 The core never calls `Date.now()`, `setTimeout`, `crypto.randomUUID()`, `console` or the file system. Each middleware
-and route factory receives only the dependencies it uses (for example `rateLimit({ store, clock, logger, … })`), so it
-can be read and tested on its own.
+and route factory receives only the dependencies it uses (for example `rateLimit({ store, clock, logger, … })`), so each
+one can be read and tested on its own. That is why `deno task test` passes with every permission denied.
 
-This is why the tests need no server, no network and no permissions. `deno task test` runs with every permission denied.
-A fake clock fires timers on demand, and a fake `readStatic` records every path it is asked for.
+### Request pipeline
 
-## Request pipeline
+Middleware is `(next: Handler) => Handler`, and `compose(a, b, c)` runs a → b → c → router. The order in
+[`src/app.ts`](src/app.ts) is deliberate:
 
-Middleware is `(next: Handler) => Handler`; `compose(a, b, c)` runs a → b → c → router. The order in `src/app.ts`:
+| # | Middleware        | Why it sits here                                                              |
+| - | ----------------- | ----------------------------------------------------------------------------- |
+| 1 | `securityHeaders` | Every response, including errors and rejections, gets the headers             |
+| 2 | `requestLogger`   | Sees the final status; logs at `debug`, so it is silent by default            |
+| 3 | `errorBoundary`   | Any throw becomes a generic 500 with an `errorId`; details go only to the log |
+| 4 | `cors`            | Answers preflights and rejects disallowed origins before any work is done     |
+| 5 | `timeout`         | 503 if no response arrives within `REQUEST_TIMEOUT_MS`                        |
+| 6 | `rateLimit`       | A cheap counter check before the body is read; `/health` is exempt            |
+| 7 | `bodyLimit`       | Rejects oversized bodies before anything parses them                          |
+| 8 | router            | Plus route-level middleware, such as the auth hook on `DELETE /users/:id`     |
 
-1. **securityHeaders**: every response, including errors and rejections, gets the headers.
-2. **requestLogger**: one line per request at `debug`, so it is silent by default.
-3. **errorBoundary**: any throw becomes a generic 500 carrying an `errorId`; details go only to the log.
-4. **cors**: answers preflights and rejects disallowed origins before any work is done.
-5. **timeout**: 503 if no response arrives within `REQUEST_TIMEOUT_MS`.
-6. **rateLimit**: a cheap counter check before the body is read; `/health` is exempt.
-7. **bodyLimit**: rejects oversized bodies before anything parses them.
-8. **router**: plus route-level middleware such as the auth hook on `DELETE /users/:id`.
+### Storage
 
-## Routes
+Routes depend on a four-method `UserStore` interface (`create`, `find`, `listNewest`, `delete`) with two
+implementations:
 
-| Method   | Path         | Notes                                                                                     |
+- **`createKvUserStore(kv)`** ([`src/users.ts`](src/users.ts)) works on any `KvStore`. It keeps a newest-first index key
+  for listing and claims each email with an atomic `setIfAbsent`.
+- **`createD1UserStore(db)`** ([`src/adapters/worker.ts`](src/adapters/worker.ts)) uses SQL. A `UNIQUE` email column
+  enforces uniqueness, and `ORDER BY … LIMIT` handles listing. The table is created on first use.
+
+Emails are unique regardless of case on every runtime. To use Redis, Postgres or anything else, implement `KvStore` or
+`UserStore` in an adapter. Nothing else changes.
+
+<details>
+<summary><b>Project layout</b></summary>
+
+```
+src/
+  core/                  runtime-agnostic, no side effects of its own
+    types.ts             Handler, Middleware, Deps and the storage/clock/logger interfaces
+    router.ts            URLPattern router: routes are data, matching is a pure function
+    middleware.ts        compose + logger, error boundary, CORS, security headers,
+                         timeout, rate limit, body limit, auth hook
+    http.ts              pure response helpers (json, text, notFound, badRequest, …)
+    validate.ts          zod helpers: parseJson / parseQuery / parseParams → Result
+    static.ts            path sanitizing, Content-Type, cache headers, ETags
+    config.ts            the config schema, parsed once at startup
+    auth.ts, crypto.ts, log.ts, request.ts, sse.ts
+  routes/                one file per concern: users, events (SSE), static, health
+  users.ts               user schemas (types come from z.infer), UserStore, KV-backed store
+  stores/memory.ts       in-memory KV, rate-limit counters and event bus
+  app.ts                 createApp(deps): wires routes and middleware
+  adapters/
+    deno.ts bun.ts node.ts worker.ts   the only files with runtime-specific code
+    common.ts            shared adapter helpers (Web-standard globals only)
+public/                  served as-is: index.html, app.js, lib.js, favicon.svg, styles.css (built)
+frontend/styles.css      Tailwind entry point
+tests/                   Deno tests that call app(new Request(...)) directly
+docs/assets/             README artwork
+```
+
+</details>
+
+## API
+
+| Method   | Path         | Description                                                                               |
 | -------- | ------------ | ----------------------------------------------------------------------------------------- |
 | `GET`    | `/health`    | `{ "ok": true }`                                                                          |
 | `GET`    | `/users`     | `?limit=1..100`, newest first                                                             |
 | `POST`   | `/users`     | JSON `{ name, email }`, strict schema; `201` + `Location`, or `409` if the email is taken |
 | `GET`    | `/users/:id` | `id` must be a UUID                                                                       |
-| `DELETE` | `/users/:id` | needs `Authorization: Bearer $ADMIN_TOKEN`                                                |
-| `GET`    | `/events`    | server-sent events: `ready`, `ping`, `user.created`, `user.deleted`                       |
-| `GET`    | `/*`         | static files from `public/` (`/` → `index.html`)                                          |
+| `DELETE` | `/users/:id` | Requires `Authorization: Bearer $ADMIN_TOKEN`                                             |
+| `GET`    | `/events`    | Server-sent events: `ready`, `ping`, `user.created`, `user.deleted`                       |
+| `GET`    | `/*`         | Static files from `public/` (`/` → `index.html`)                                          |
 
-Errors always use one JSON shape: `{ "error": "code", "message": "…", ...details }`. A validation failure is a 400 that
-lists each issue:
+Errors share one JSON shape, `{ "error": "code", "message": "…", ...details }`. Validation failures list each issue:
 
 ```json
 {
@@ -146,150 +212,157 @@ lists each issue:
 }
 ```
 
-## Unix philosophy, applied
+## Security
 
-- **Do one thing well.** Every middleware is a separate factory, and every route lives in its own file. Validation,
-  static-path rules and response building are separate pure modules.
-- **Compose small pieces.** The app is `compose(...middleware)(router)`. Route-level middleware (auth) uses the same
-  shape.
-- **Plain interfaces.** Functions take data and return data. Logs are line-delimited JSON on stderr (stdout on Workers).
-- **Fail loudly and early, be quiet on success.** Bad config stops startup with a clear error. Successful requests log
-  nothing at the default `info` level; security events log at `warn`.
-- **Minimal, replaceable dependencies.** zod and Tailwind only. Storage, clock and logging are interfaces with in-memory
-  defaults.
+The defaults follow the OWASP Top 10 and ASVS where they apply.
 
-## OWASP controls
-
-| Control                              | Where                                                                                                                                 |
+| Control                              | Implementation                                                                                                                        |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Allowlist validation of all input    | zod `.strict()` schemas for body, params and query; Unicode-aware name allowlist                                                      |
 | Request size limit before parsing    | `bodyLimit`: Content-Length first, then a byte counter for chunked bodies                                                             |
-| No internals in errors               | `errorBoundary`: generic 500 + `errorId`, stack only in the server log                                                                |
-| Security headers                     | strict CSP (no inline script or style), nosniff, `Referrer-Policy`, `X-Frame-Options` + `frame-ancestors`, COOP/CORP, HSTS over HTTPS |
-| CORS                                 | exact-origin allowlist from config; `*` is rejected at startup                                                                        |
-| Secrets                              | only from validated config; never logged; sensitive log keys redacted                                                                 |
+| No internals in errors               | `errorBoundary`: generic 500 + `errorId`; the stack goes only to the server log                                                       |
+| Security headers                     | Strict CSP (no inline script or style), nosniff, `Referrer-Policy`, `X-Frame-Options` + `frame-ancestors`, COOP/CORP, HSTS over HTTPS |
+| CORS                                 | Exact-origin allowlist from config; `*` is rejected at startup                                                                        |
+| Secrets                              | Only from validated config; never logged; sensitive log keys redacted                                                                 |
 | Constant-time token comparison       | `timingSafeEqual`: SHA-256 both sides, then compare in constant time                                                                  |
-| Authentication hook                  | `requireAuth({ authenticate })`; `bearerTokenAuth` fails closed if unset                                                              |
-| Rate limiting                        | `rateLimit` on an injected `RateLimitStore`; returns 429 + `Retry-After`                                                              |
-| Timeouts                             | per-request `timeout` middleware, plus server timeouts in the Node and Bun adapters                                                   |
-| Correct Content-Type, encoded output | every helper sets Content-Type; the frontend only uses `textContent`                                                                  |
-| Path traversal                       | `sanitizeStaticPath` allowlist + `resolveInside` check in each adapter                                                                |
+| Authentication hook                  | `requireAuth({ authenticate })`; `bearerTokenAuth` fails closed when no token is set                                                  |
+| Rate limiting                        | `rateLimit` on an injected `RateLimitStore`; 429 + `Retry-After`                                                                      |
+| Timeouts                             | Per-request `timeout` middleware, plus server timeouts in the Node and Bun adapters                                                   |
+| Correct Content-Type, encoded output | Every helper sets Content-Type; the frontend only uses `textContent`                                                                  |
+| Path traversal                       | `sanitizeStaticPath` allowlist + a `resolveInside` check in each adapter                                                              |
 | Security event logging               | `validation_failed`, `auth_failed`, `rate_limited`, `cors_origin_denied`, `body_too_large`, `static_path_rejected`                    |
 
-Outbound calls: the app makes none. If you add some, inject `fetch` through `Deps` and pass `AbortSignal.timeout(ms)`.
+- **Client IP:** each adapter writes the socket address into an internal header and always overwrites any value the
+  client sent. `X-Forwarded-For` and `X-Forwarded-Proto` are honoured only with `TRUST_PROXY=true`; enable that only
+  behind exactly one trusted proxy.
+- **Outbound calls:** the app makes none. If you add some, inject `fetch` through `Deps` and pass
+  `AbortSignal.timeout(ms)`.
 
-Client IP: an adapter writes the socket address into an internal header and always overwrites any client-supplied value.
-`X-Forwarded-For` and `X-Forwarded-Proto` are honored only with `TRUST_PROXY=true`. Enable that only behind exactly one
-trusted proxy.
+## Design principles
 
-## Frontend and Tailwind
+These follow the Unix philosophy:
 
-`public/index.html` lists users and has a form to create one. The JS is plain ES modules, type-checked with JSDoc
-(`// @ts-check`) and no build step:
+- **Do one thing well.** Every middleware is a separate factory and every route has its own file. Validation,
+  static-path rules and response building are separate pure modules.
+- **Compose small pieces.** The app is `compose(...middleware)(router)`. Route-level middleware uses the same shape.
+- **Plain interfaces.** Functions take data and return data. Logs are line-delimited JSON on stderr (stdout on Workers).
+- **Fail loudly, stay quiet on success.** Bad config stops startup with a clear error. Successful requests log nothing
+  at the default `info` level; security events log at `warn`.
+- **Minimal, replaceable dependencies.** Storage, clock and logging are interfaces with in-memory defaults.
 
-- `public/lib.js` holds the pure helpers (shape checks, sorting, error messages, formatting). They are unit-tested in
-  `tests/frontend_test.ts`.
-- `public/app.js` holds the edges: `fetch` calls, DOM updates and the `EventSource`. Rows are cloned from a `<template>`
-  and filled with `textContent`; `innerHTML` is never used for data.
+## Frontend
 
-Tailwind CSS v4 is compiled at build time by the Tailwind CLI (`@tailwindcss/cli`) from `frontend/styles.css` into
-`public/styles.css`. The CDN/play script is not used, because it injects inline styles that the strict CSP would block.
-Automatic source detection is off; `@source` lists exactly the files to scan.
+[`public/index.html`](public/index.html) lists users, has a form to create one, and updates live over server-sent
+events. The JavaScript is plain ES modules, type-checked with JSDoc (`// @ts-check`), with no build step:
+
+- [`public/lib.js`](public/lib.js) holds the pure helpers (shape checks, sorting, error messages, formatting). They are
+  unit-tested.
+- [`public/app.js`](public/app.js) holds the edges: `fetch`, DOM updates and `EventSource`. Rows are cloned from a
+  `<template>` and filled with `textContent`; `innerHTML` is never used for data.
+
+**Tailwind CSS v4** is compiled at build time by `@tailwindcss/cli` from [`frontend/styles.css`](frontend/styles.css)
+into `public/styles.css`, which is git-ignored. The CDN/play script is not used, because it injects inline styles that
+the strict CSP would block. `@source` lists exactly the files to scan.
 
 ```sh
-deno task build:css   # or: npm run build:css      one-off, minified
-deno task dev:css     # or: npm run watch:css      rebuild on change
+deno task build:css   # or: npm run build:css    one-off, minified
+deno task dev:css     # or: npm run watch:css    rebuild on change
 ```
 
-`public/styles.css` is generated and git-ignored. The `start` and `dev` scripts build it first.
+## Deployment
 
-## Running each runtime
-
-**Deno** (2.x)
+### <img src="docs/assets/runtimes/deno.svg" width="22" alt=""> Deno
 
 ```sh
 deno task dev     # watch mode
 deno task start   # build CSS, then serve
 ```
 
-Permissions are scoped: `--allow-net --allow-env --allow-read=public`. `--unstable-kv` enables Deno KV, which persists
+Permissions are scoped to `--allow-net --allow-env --allow-read=public`. `--unstable-kv` enables Deno KV, which persists
 in Deno's cache directory.
 
-**Node** (>= 24, which provides the global `URLPattern` and runs `.ts` files directly)
-
-```sh
-npm install
-npm run dev:node      # or: npm run start:node
-```
-
-**Bun** (>= 1.3)
+### <img src="docs/assets/runtimes/bun.svg" width="22" alt=""> Bun
 
 ```sh
 bun install
-bun run dev:bun       # or: bun run start:bun
+bun run start:bun     # or: bun run dev:bun
 ```
 
-**Cloudflare Workers**
+### <img src="docs/assets/runtimes/node.svg" width="22" alt=""> Node.js
 
 ```sh
 npm install
-npm run dev:worker                       # local (workerd, with a local D1)
+npm run start:node    # or: npm run dev:node
+```
+
+Node 24 or later is required: it provides the global `URLPattern` and runs `.ts` files directly.
+
+### <img src="docs/assets/runtimes/cloudflare-workers.svg" width="22" alt=""> Cloudflare Workers
+
+```sh
+npm install
+npm run dev:worker                       # local workerd, with a local D1
 npm run deploy:worker
 npx wrangler@4 secret put ADMIN_TOKEN    # optional
 ```
 
-The D1 binding in `wrangler.jsonc` has a `database_name` but no `database_id`. On the first deploy, Wrangler (4.45+)
-connects the database with that name or creates it, and later deploys reuse it. Nothing has to be created by hand.
+- **No manual setup.** The D1 binding in [`wrangler.jsonc`](wrangler.jsonc) has a `database_name` but no ID. On the
+  first deploy, Wrangler (4.45+) connects to the database with that name, or creates it. The `users` table is created on
+  first use. Move to `wrangler d1 migrations` once the schema needs to change.
+- **Git integration (Workers Builds):** use `npm run build:css` as the build command and `npx wrangler deploy` as the
+  deploy command.
+- **Static files** go through the `ASSETS` binding with `run_worker_first`, so they get the same headers and checks.
+- **Per-isolate state:** rate-limit counters and SSE subscribers live per isolate (best effort). Put a Durable Object or
+  the Rate Limiting binding behind the same interfaces for global guarantees.
 
-With Cloudflare's Git integration (Workers Builds), use `npm run build:css` as the build command and
-`npx wrangler deploy` as the deploy command.
-
-Static files go through the `ASSETS` binding with `run_worker_first`, so they get the same headers and checks. On
-Workers, rate-limit counters and SSE subscribers live per isolate, so they are best effort. Use a Durable Object or the
-Rate Limiting binding behind the same interfaces for global guarantees.
-
-The `dev:*` npm scripts use `&` to run the CSS watcher alongside the server, so they need a POSIX shell. `deno task dev`
-works everywhere.
+> [!NOTE]
+> The `dev:*` npm scripts use `&` to run the CSS watcher alongside the server, so they need a POSIX shell.
+> `deno task dev` works everywhere.
 
 ## Configuration
 
-All variables are optional and validated at startup; blank means "use the default". Export them in your shell or load a
-`.env` file: Bun loads it automatically, Deno and Node need `--env-file`, and Workers read `.dev.vars` locally. See
-`.env.example`.
+All variables are optional and validated at startup; blank means "use the default". Export them in your shell, or load a
+`.env` file: Bun reads it automatically, Deno and Node need `--env-file`, and Workers read `.dev.vars` locally. See
+[`.env.example`](.env.example).
 
 | Variable                 | Default             | Notes                                                  |
 | ------------------------ | ------------------- | ------------------------------------------------------ |
-| `PORT`, `HOST`           | `8000`, `127.0.0.1` | use `HOST=0.0.0.0` in containers                       |
+| `PORT`, `HOST`           | `8000`, `127.0.0.1` | Use `HOST=0.0.0.0` in containers                       |
 | `LOG_LEVEL`              | `info`              | `debug` adds one line per request                      |
-| `CORS_ORIGINS`           | (none)              | comma-separated exact origins; `*` is rejected         |
+| `CORS_ORIGINS`           | (none)              | Comma-separated exact origins; `*` is rejected         |
 | `CORS_ALLOW_CREDENTIALS` | `false`             |                                                        |
-| `TRUST_PROXY`            | `false`             | honor `X-Forwarded-*` from one trusted proxy           |
+| `TRUST_PROXY`            | `false`             | Honour `X-Forwarded-*` from one trusted proxy          |
 | `MAX_BODY_BYTES`         | `16384`             |                                                        |
 | `REQUEST_TIMEOUT_MS`     | `10000`             |                                                        |
-| `RATE_LIMIT_MAX`         | `100`               | requests per window per client IP                      |
+| `RATE_LIMIT_MAX`         | `100`               | Requests per window per client IP                      |
 | `RATE_LIMIT_WINDOW_MS`   | `60000`             |                                                        |
 | `SSE_HEARTBEAT_MS`       | `15000`             | 1–60 s                                                 |
 | `ADMIN_TOKEN`            | (unset)             | ≥ 32 chars; unset means admin routes always return 401 |
 
-## Tests and checks
+## Testing
 
 ```sh
-deno task test    # 145 tests, no permissions: routing, validation, middleware, security, SSE, frontend, Worker adapter
+deno task test    # 145 tests, run with no permissions
 deno task check   # type-checks src/ (all four adapters), tests/ and the frontend JS
 deno task lint    # deno lint + deno fmt --check
 ```
 
-Tests call `app(new Request(...))` with in-memory fakes. The security suite covers:
+Tests call `app(new Request(...))` with in-memory fakes: a fake clock fires timers on demand, a fake `readStatic`
+records every path it is asked for, and the D1 store runs on in-memory SQLite. Coverage includes routing, validation,
+middleware order, server-sent events, the frontend helpers and the Worker adapter. The security suite checks:
 
 - oversized and chunked bodies
 - unknown fields
 - disallowed origins
-- headers on every response type
+- security headers on every response type
 - rate limiting, including spoofed `X-Forwarded-For`
 - encoded path-traversal attempts, which never reach the file reader
-- 500s with no stack trace
+- 500 responses with no stack trace
 - secrets kept out of logs
 
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 Pedro M. Dominguez
+
+<sub>Deno, Bun, Node.js and Cloudflare Workers are trademarks of their respective owners. Their logos are used here only
+to show compatibility and come from <a href="https://simpleicons.org">Simple Icons</a> (CC0).</sub>
