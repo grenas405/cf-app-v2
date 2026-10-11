@@ -5,15 +5,15 @@
 <br/>
 <br/>
 
-[![Deno](https://img.shields.io/badge/Deno-2.x-000000?style=flat-square&logo=deno&logoColor=white)](https://deno.com)
-[![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.3-14151A?style=flat-square&logo=bun&logoColor=FBF0DF)](https://bun.sh)
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A524-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-D1-F38020?style=flat-square&logo=cloudflareworkers&logoColor=white)](https://workers.cloudflare.com)
+[![Deno 2.x](docs/assets/badges/deno.svg)](https://deno.com)
+[![Bun 1.3 or later](docs/assets/badges/bun.svg)](https://bun.sh)
+[![Node.js 24 or later](docs/assets/badges/node.svg)](https://nodejs.org)
+[![Cloudflare Workers with D1](docs/assets/badges/cloudflare-workers.svg)](https://workers.cloudflare.com)
 <br/>
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![zod](https://img.shields.io/badge/zod-4-408AFF?style=flat-square&logo=zod&logoColor=white)](https://zod.dev)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![License: MIT](https://img.shields.io/badge/license-MIT-22C55E?style=flat-square)](LICENSE)
+[![TypeScript strict](docs/assets/badges/typescript.svg)](https://www.typescriptlang.org)
+[![zod 4](docs/assets/badges/zod.svg)](https://zod.dev)
+[![Tailwind CSS 4](docs/assets/badges/tailwindcss.svg)](https://tailwindcss.com)
+[![License: MIT](docs/assets/badges/license.svg)](LICENSE)
 
 **A small, production-minded HTTP server starter in TypeScript.**<br/> One pure, Web-standard handler that runs
 unchanged on four runtimes, with a Tailwind CSS frontend,<br/> OWASP-aligned defaults, and 145 tests that need no
