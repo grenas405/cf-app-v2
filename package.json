@@ -16,8 +16,8 @@
     "start:node": "npm run build:css && node src/adapters/node.ts",
     "dev:bun": "bun run build:css && (bun run watch:css & bun --watch src/adapters/bun.ts)",
     "dev:node": "npm run build:css && (npm run watch:css & node --watch src/adapters/node.ts)",
-    "dev:worker": "npm run build:css && npx wrangler@4 dev",
-    "deploy:worker": "npm run build:css && npx wrangler@4 deploy"
+    "dev:worker": "npx wrangler@4 dev",
+    "deploy:worker": "npx wrangler@4 deploy"
   },
   "dependencies": {
     "zod": "^4.1.12"

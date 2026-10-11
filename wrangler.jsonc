@@ -5,6 +5,13 @@
   "main": "src/adapters/worker.ts",
   "compatibility_date": "2026-09-01",
 
+  // Runs before every `wrangler deploy` and `wrangler dev`: compiles the
+  // Tailwind CSS into public/styles.css (git-ignored), so the dashboard's
+  // build command can stay empty.
+  "build": {
+    "command": "npm run build:css"
+  },
+
   // Static files from ./public, read by the app through the ASSETS binding.
   // run_worker_first routes every request through the app, so static files
   // get the same security headers, rate limiting and path checks.

@@ -308,8 +308,9 @@ npx wrangler@4 secret put ADMIN_TOKEN    # optional
 - **No manual setup.** The D1 binding in [`wrangler.jsonc`](wrangler.jsonc) has a `database_name` but no ID. On the
   first deploy, Wrangler (4.45+) connects to the database with that name, or creates it. The `users` table is created on
   first use. Move to `wrangler d1 migrations` once the schema needs to change.
-- **Git integration (Workers Builds):** use `npm run build:css` as the build command and `npx wrangler deploy` as the
-  deploy command.
+- **CSS builds itself.** The `build` step in `wrangler.jsonc` runs `npm run build:css` before every `wrangler deploy`
+  and `wrangler dev`. With Cloudflare's Git integration (Workers Builds), leave the build command empty and use
+  `npx wrangler deploy` as the deploy command.
 - **Static files** go through the `ASSETS` binding with `run_worker_first`, so they get the same headers and checks.
 - **Per-isolate state:** rate-limit counters and SSE subscribers live per isolate (best effort). Put a Durable Object or
   the Rate Limiting binding behind the same interfaces for global guarantees.
