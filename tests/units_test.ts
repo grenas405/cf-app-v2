@@ -48,6 +48,13 @@ Deno.test("memory KV lists by key prefix, sorted and limited", async () => {
   assertEquals(await kv.get(["users", "a"]), null);
 });
 
+Deno.test("memory KV setIfAbsent writes only to unused keys", async () => {
+  const kv = createMemoryKv();
+  assertEquals(await kv.setIfAbsent(["email", "a"], "1"), true);
+  assertEquals(await kv.setIfAbsent(["email", "a"], "2"), false);
+  assertEquals(await kv.get(["email", "a"]), "1");
+});
+
 Deno.test("memory KV evicts the oldest entries beyond maxEntries", async () => {
   const kv = createMemoryKv({ maxEntries: 2 });
   await kv.set(["a"], "1");

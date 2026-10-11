@@ -7,8 +7,9 @@ import type { AppConfig } from "../core/config.ts";
 import { errorResponse, withDefaultHeaders } from "../core/http.ts";
 import { createLogger, formatLogLine } from "../core/log.ts";
 import { securityHeaderValues } from "../core/middleware.ts";
-import type { Clock, Deps, EventBus, KvStore, LogFields, RateLimitStore, ReadStatic } from "../core/types.ts";
+import type { Clock, Deps, EventBus, LogFields, RateLimitStore, ReadStatic } from "../core/types.ts";
 import { createEventBus, createMemoryRateLimitStore } from "../stores/memory.ts";
+import type { UserStore } from "../users.ts";
 
 export const systemClock: Clock = {
   now: () => Date.now(),
@@ -28,7 +29,7 @@ export function randomId(): string {
 
 export interface PlatformDeps {
   readonly config: AppConfig;
-  readonly kv: KvStore;
+  readonly users: UserStore;
   readonly readStatic: ReadStatic;
   /** Where log lines go (one JSON object per line). */
   readonly write: (line: string) => void;
@@ -40,7 +41,7 @@ export interface PlatformDeps {
 export function createDeps(platform: PlatformDeps): Deps {
   return {
     config: platform.config,
-    kv: platform.kv,
+    users: platform.users,
     readStatic: platform.readStatic,
     logger: createLogger({ level: platform.config.LOG_LEVEL, write: platform.write, now: systemClock.now }),
     clock: systemClock,

@@ -30,14 +30,23 @@ export interface MemoryKvOptions {
 
 export function createMemoryKv(options: MemoryKvOptions = { maxEntries: 10_000 }): KvStore {
   const entries = new Map<string, KvEntry>();
+  const store = (key: KvKey, value: string): void => {
+    const encoded = encodeKey(key);
+    entries.delete(encoded);
+    entries.set(encoded, { key: [...key], value });
+    evictOldest(entries, options.maxEntries);
+  };
   return {
     get: (key) => Promise.resolve(entries.get(encodeKey(key))?.value ?? null),
     set: (key, value) => {
-      const encoded = encodeKey(key);
-      entries.delete(encoded);
-      entries.set(encoded, { key: [...key], value });
-      evictOldest(entries, options.maxEntries);
+      store(key, value);
       return Promise.resolve();
+    },
+    // Check and write happen in one synchronous step, so this is atomic.
+    setIfAbsent: (key, value) => {
+      if (entries.has(encodeKey(key))) return Promise.resolve(false);
+      store(key, value);
+      return Promise.resolve(true);
     },
     delete: (key) => {
       entries.delete(encodeKey(key));

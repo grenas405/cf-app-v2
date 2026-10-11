@@ -10,6 +10,7 @@ import { type AppConfig, parseConfig } from "../core/config.ts";
 import { withClientIp } from "../core/request.ts";
 import { resolveInside } from "../core/static.ts";
 import { createMemoryKv } from "../stores/memory.ts";
+import { createKvUserStore } from "../users.ts";
 import { createDeps, fallbackErrorResponse, listenUrl, startupErrorLine } from "./common.ts";
 
 /**
@@ -75,7 +76,7 @@ async function readStatic(path: string): Promise<Uint8Array<ArrayBuffer> | null>
 }
 
 const config = loadConfig();
-const deps = createDeps({ config, kv: createMemoryKv(), readStatic, write: writeLine });
+const deps = createDeps({ config, users: createKvUserStore(createMemoryKv()), readStatic, write: writeLine });
 const app = createApp(deps);
 
 const server = Bun.serve({

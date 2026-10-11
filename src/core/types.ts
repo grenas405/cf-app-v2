@@ -5,6 +5,7 @@
  * file reads) is described here as an interface and handed to the app through
  * `Deps`. Adapters build the real implementations; tests build fakes.
  */
+import type { UserStore } from "../users.ts";
 import type { AppConfig } from "./config.ts";
 
 /** The whole application, and every piece of it, has this shape. */
@@ -43,6 +44,8 @@ export interface KvEntry {
 export interface KvStore {
   get(key: KvKey): Promise<string | null>;
   set(key: KvKey, value: string): Promise<void>;
+  /** Stores `value` only if `key` is unused; resolves to whether it did. Atomic where the backend allows. */
+  setIfAbsent(key: KvKey, value: string): Promise<boolean>;
   delete(key: KvKey): Promise<void>;
   /** Up to `limit` entries whose key starts with `prefix`. */
   list(prefix: KvKey, limit: number): Promise<readonly KvEntry[]>;
@@ -109,7 +112,8 @@ export type ReadStatic = (path: string) => Promise<Uint8Array<ArrayBuffer> | nul
 /** Everything the app needs from the outside world. */
 export interface Deps {
   readonly config: AppConfig;
-  readonly kv: KvStore;
+  /** User records: KV-backed on Deno, Bun and Node; D1 on Workers. */
+  readonly users: UserStore;
   readonly rateLimitStore: RateLimitStore;
   readonly logger: Logger;
   readonly clock: Clock;

@@ -39,7 +39,8 @@ src/
     config.ts            the config schema, parsed once at startup
     auth.ts, crypto.ts, log.ts, request.ts, sse.ts
   routes/                one file per concern: users, events (SSE), static, health
-  users.ts               user schemas (types come from z.infer) and KV access
+  users.ts               user schemas (types come from z.infer), the UserStore interface,
+                         and its KV-backed implementation
   stores/memory.ts       in-memory KV, rate-limit counters and event bus
   app.ts                 createApp(deps): wires routes and middleware
   adapters/
@@ -47,7 +48,8 @@ src/
     common.ts            shared adapter helpers (Web-standard globals only)
 public/                  served as-is: index.html, app.js, lib.js, favicon.svg, styles.css (built)
 frontend/styles.css      Tailwind entry point
-tests/                   Deno tests that call app(new Request(...)) directly
+tests/                   Deno tests that call app(new Request(...)) directly; D1 runs on
+                         in-memory SQLite (tests/d1_sqlite.ts)
 ```
 
 ## The core/adapter split
@@ -64,14 +66,24 @@ Each adapter is a thin entry point that does exactly three things:
 
 Anything that mentions `Deno.`, `Bun.`, `process` or `node:` lives only in `src/adapters/`.
 
-| Runtime | Storage                 | Static files       | Client IP from             |
-| ------- | ----------------------- | ------------------ | -------------------------- |
-| Deno    | Deno KV (persistent)    | `Deno.readFile`    | `info.remoteAddr`          |
-| Bun     | in-memory               | `Bun.file`         | `server.requestIP()`       |
-| Node    | in-memory               | `node:fs/promises` | `req.socket.remoteAddress` |
-| Workers | KV namespace `USERS_KV` | `ASSETS` binding   | `CF-Connecting-IP`         |
+| Runtime | User storage         | Static files       | Client IP from             |
+| ------- | -------------------- | ------------------ | -------------------------- |
+| Deno    | Deno KV (persistent) | `Deno.readFile`    | `info.remoteAddr`          |
+| Bun     | in-memory            | `Bun.file`         | `server.requestIP()`       |
+| Node    | in-memory            | `node:fs/promises` | `req.socket.remoteAddress` |
+| Workers | D1 database `DB`     | `ASSETS` binding   | `CF-Connecting-IP`         |
 
-To use Redis, SQLite, D1 or anything else, implement the four-method `KvStore` interface in the adapter. Nothing else
+Routes depend only on the four-method `UserStore` interface (`create`, `find`, `listNewest`, `delete`). There are two
+implementations:
+
+- `createKvUserStore(kv)` in `src/users.ts` works on any `KvStore`. It keeps a newest-first index key for listing, and
+  claims each email with an atomic `setIfAbsent`.
+- `createD1UserStore(db)` in `src/adapters/worker.ts` uses SQL. A `UNIQUE` email column enforces uniqueness, and
+  `ORDER BY ... LIMIT` handles listing. The `users` table is created on first use with `CREATE TABLE IF NOT EXISTS`.
+  Move to `wrangler d1 migrations` once the schema needs to change.
+
+Emails are unique regardless of case on every runtime; a duplicate gets `409 Conflict`. To use Redis, Postgres or
+anything else, implement `KvStore` (four methods plus `setIfAbsent`) or `UserStore` in the adapter. Nothing else
 changes.
 
 ## Side effects at the edges
@@ -81,7 +93,7 @@ The core takes inputs and returns outputs. Everything that touches the outside w
 ```ts
 interface Deps {
   config: AppConfig; // validated once, at startup
-  kv: KvStore; // storage
+  users: UserStore; // user records (KV or D1, chosen by the adapter)
   rateLimitStore: RateLimitStore; // rate-limit counters
   logger: Logger; // writes through an injected (line: string) => void
   clock: Clock; // now(), after(), every(): time and timers
@@ -113,15 +125,15 @@ Middleware is `(next: Handler) => Handler`; `compose(a, b, c)` runs a → b → 
 
 ## Routes
 
-| Method   | Path         | Notes                                                               |
-| -------- | ------------ | ------------------------------------------------------------------- |
-| `GET`    | `/health`    | `{ "ok": true }`                                                    |
-| `GET`    | `/users`     | `?limit=1..100`, newest first                                       |
-| `POST`   | `/users`     | JSON `{ name, email }`, strict schema, `201` + `Location`           |
-| `GET`    | `/users/:id` | `id` must be a UUID                                                 |
-| `DELETE` | `/users/:id` | needs `Authorization: Bearer $ADMIN_TOKEN`                          |
-| `GET`    | `/events`    | server-sent events: `ready`, `ping`, `user.created`, `user.deleted` |
-| `GET`    | `/*`         | static files from `public/` (`/` → `index.html`)                    |
+| Method   | Path         | Notes                                                                                     |
+| -------- | ------------ | ----------------------------------------------------------------------------------------- |
+| `GET`    | `/health`    | `{ "ok": true }`                                                                          |
+| `GET`    | `/users`     | `?limit=1..100`, newest first                                                             |
+| `POST`   | `/users`     | JSON `{ name, email }`, strict schema; `201` + `Location`, or `409` if the email is taken |
+| `GET`    | `/users/:id` | `id` must be a UUID                                                                       |
+| `DELETE` | `/users/:id` | needs `Authorization: Bearer $ADMIN_TOKEN`                                                |
+| `GET`    | `/events`    | server-sent events: `ready`, `ping`, `user.created`, `user.deleted`                       |
+| `GET`    | `/*`         | static files from `public/` (`/` → `index.html`)                                          |
 
 Errors always use one JSON shape: `{ "error": "code", "message": "…", ...details }`. A validation failure is a 400 that
 lists each issue:
@@ -221,11 +233,16 @@ bun run dev:bun       # or: bun run start:bun
 
 ```sh
 npm install
-npx wrangler@4 kv namespace create USERS_KV    # put the id in wrangler.jsonc
-npx wrangler@4 secret put ADMIN_TOKEN          # optional
-npm run dev:worker                             # local (workerd)
+npm run dev:worker                       # local (workerd, with a local D1)
 npm run deploy:worker
+npx wrangler@4 secret put ADMIN_TOKEN    # optional
 ```
+
+The D1 binding in `wrangler.jsonc` has a `database_name` but no `database_id`. On the first deploy, Wrangler (4.45+)
+connects the database with that name or creates it, and later deploys reuse it. Nothing has to be created by hand.
+
+With Cloudflare's Git integration (Workers Builds), use `npm run build:css` as the build command and
+`npx wrangler deploy` as the deploy command.
 
 Static files go through the `ASSETS` binding with `run_worker_first`, so they get the same headers and checks. On
 Workers, rate-limit counters and SSE subscribers live per isolate, so they are best effort. Use a Durable Object or the
@@ -257,7 +274,7 @@ All variables are optional and validated at startup; blank means "use the defaul
 ## Tests and checks
 
 ```sh
-deno task test    # 138 tests, no permissions: routing, validation, middleware, security, SSE, frontend, Worker adapter
+deno task test    # 145 tests, no permissions: routing, validation, middleware, security, SSE, frontend, Worker adapter
 deno task check   # type-checks src/ (all four adapters), tests/ and the frontend JS
 deno task lint    # deno lint + deno fmt --check
 ```

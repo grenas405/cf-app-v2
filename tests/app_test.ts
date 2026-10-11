@@ -42,6 +42,31 @@ Deno.test("POST /users trims names", async () => {
   assertEquals((await response.json()).name, "Grace Hopper");
 });
 
+Deno.test("POST /users answers 409 when the email is taken, ignoring case", async () => {
+  const { app, bus } = createTestApp();
+  let published = 0;
+  bus.subscribe(() => published++);
+  await (await app(postJson("/users", VALID_USER))).body?.cancel();
+  const duplicate = await app(postJson("/users", { name: "Someone Else", email: "ADA@example.com" }));
+  assertEquals(duplicate.status, 409);
+  assertEquals(await duplicate.json(), { error: "email_taken", message: "A user with this email already exists" });
+  assertEquals(published, 1);
+  assertEquals((await (await app(get("/users"))).json()).users.length, 1);
+});
+
+Deno.test("deleting a user frees their email", async () => {
+  const { app } = createTestApp();
+  await (await app(postJson("/users", VALID_USER))).body?.cancel();
+  const remove = new Request(`${BASE_URL}/users/${FIRST_ID}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+  });
+  assertEquals((await app(remove)).status, 204);
+  const again = await app(postJson("/users", VALID_USER));
+  assertEquals(again.status, 201);
+  await again.body?.cancel();
+});
+
 Deno.test("GET /users lists users newest first and honors ?limit", async () => {
   const { app, clock } = createTestApp();
   for (const name of ["First", "Second", "Third"]) {

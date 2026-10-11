@@ -7,6 +7,7 @@ import { type AppConfig, parseConfig } from "../src/core/config.ts";
 import { createLogger } from "../src/core/log.ts";
 import type { Cancel, Clock, Deps, EventBus, Handler, KvStore, ReadStatic, ServerEvent } from "../src/core/types.ts";
 import { createEventBus, createMemoryKv, createMemoryRateLimitStore } from "../src/stores/memory.ts";
+import { createKvUserStore } from "../src/users.ts";
 
 export const BASE_URL = "http://localhost:8000";
 export const ADMIN_TOKEN = "test-admin-token-0123456789abcdef-XYZ";
@@ -171,7 +172,7 @@ export function createTestApp(options: TestAppOptions = {}): TestApp {
   const staticFiles = createFakeStatic(options.files ?? DEFAULT_FILES);
   const deps: Deps = {
     config,
-    kv: options.kv ?? createMemoryKv(),
+    users: createKvUserStore(options.kv ?? createMemoryKv()),
     rateLimitStore: createMemoryRateLimitStore(),
     logger: createLogger({ level: config.LOG_LEVEL, write: (line) => logs.lines.push(line), now: clock.now }),
     clock,

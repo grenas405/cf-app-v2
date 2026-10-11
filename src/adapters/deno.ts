@@ -11,6 +11,7 @@ import { type AppConfig, CONFIG_KEYS, parseConfig } from "../core/config.ts";
 import { withClientIp } from "../core/request.ts";
 import { resolveInside } from "../core/static.ts";
 import type { KvEntry, KvStore } from "../core/types.ts";
+import { createKvUserStore } from "../users.ts";
 import { createDeps, fallbackErrorResponse, listenUrl, startupErrorLine } from "./common.ts";
 
 const PUBLIC_DIR = new URL("../../public/", import.meta.url);
@@ -35,6 +36,10 @@ function denoKvStore(kv: Deno.Kv): KvStore {
     },
     set: async (key, value) => {
       await kv.set(key, value);
+    },
+    setIfAbsent: async (key, value) => {
+      const result = await kv.atomic().check({ key, versionstamp: null }).set(key, value).commit();
+      return result.ok;
     },
     delete: async (key) => {
       await kv.delete(key);
@@ -61,7 +66,8 @@ async function readStatic(path: string): Promise<Uint8Array<ArrayBuffer> | null>
 }
 
 const config = loadConfig();
-const deps = createDeps({ config, kv: denoKvStore(await Deno.openKv()), readStatic, write: writeLine });
+const users = createKvUserStore(denoKvStore(await Deno.openKv()));
+const deps = createDeps({ config, users, readStatic, write: writeLine });
 const app = createApp(deps);
 
 Deno.serve({

@@ -16,6 +16,7 @@ import { trustedClientHeaders } from "../core/request.ts";
 import { resolveInside } from "../core/static.ts";
 import type { Handler, Logger } from "../core/types.ts";
 import { createMemoryKv } from "../stores/memory.ts";
+import { createKvUserStore } from "../users.ts";
 import { adapterErrorResponse, createDeps, fallbackErrorResponse, listenUrl, startupErrorLine } from "./common.ts";
 
 const PUBLIC_DIR = new URL("../../public/", import.meta.url);
@@ -206,7 +207,7 @@ if (typeof globalThis.URLPattern !== "function") {
 }
 
 const config = loadConfig();
-const deps = createDeps({ config, kv: createMemoryKv(), readStatic, write: writeLine });
+const deps = createDeps({ config, users: createKvUserStore(createMemoryKv()), readStatic, write: writeLine });
 const server = createServer(SERVER_TIMEOUTS, listener(createApp(deps), deps.logger));
 
 server.on("error", (error) => {

@@ -1,6 +1,7 @@
 /**
- * Users: zod schemas (the single source of the types) and storage functions
- * that take the KV store as an explicit argument.
+ * Users: zod schemas (the single source of the types), the `UserStore`
+ * interface the routes depend on, and its KV-backed implementation. The D1
+ * implementation lives in the Workers adapter.
  */
 import { z } from "zod";
 import type { KvKey, KvStore } from "./core/types.ts";
@@ -48,15 +49,50 @@ export function buildUser(input: CreateUserInput, id: string, now: number): User
   return { id, name: input.name, email: input.email, createdAt: new Date(now).toISOString() };
 }
 
+export type CreateUserResult = "created" | "email_taken";
+
+/** Storage for user records. Each adapter picks the backend. */
+export interface UserStore {
+  /** Saves a new user unless its email (compared case-insensitively) is already taken. */
+  create(user: User): Promise<CreateUserResult>;
+  find(id: string): Promise<User | null>;
+  /** The newest `limit` users, newest first. */
+  listNewest(limit: number): Promise<User[]>;
+  /** Resolves to `false` when there was no such user. */
+  delete(id: string): Promise<boolean>;
+}
+
+/** Validates a stored record (a parsed JSON value or a database row), so corrupt data never reaches clients. */
+export function toUser(value: unknown): User | null {
+  const user = UserSchema.safeParse(value);
+  return user.success ? user.data : null;
+}
+
+export function decodeUser(raw: string): User | null {
+  const json = parseJsonText(raw);
+  return json.ok ? toUser(json.data) : null;
+}
+
+function isUser(user: User | null): user is User {
+  return user !== null;
+}
+
+// ---------------------------------------------------------------------------
+// KV-backed store (Deno KV, in-memory, or any other KvStore)
+// ---------------------------------------------------------------------------
+
 /** Records by id, for direct lookups. */
 const USERS_PREFIX: KvKey = ["users"];
 
 /**
  * The same records keyed so that plain ascending key order (the only order
- * every KV store can list in) is newest first. Lets `listUsers` take the
+ * every KV store can list in) is newest first. Lets `listNewest` take the
  * newest N without scanning everything.
  */
 const NEWEST_FIRST_PREFIX: KvKey = ["users_by_newest"];
+
+/** One entry per email, claimed atomically to keep emails unique. */
+const EMAIL_PREFIX: KvKey = ["users_by_email"];
 
 /** Largest timestamp a Date can hold, so `MAX_TIME - t` is never negative. */
 const MAX_TIME = 8_640_000_000_000_000;
@@ -70,37 +106,39 @@ export function newestFirstKey(user: User): KvKey {
   return [...NEWEST_FIRST_PREFIX, `${inverted}_${user.id}`];
 }
 
-/** Stored data is re-validated on the way out, so corrupt records never reach clients. */
-export function decodeUser(raw: string): User | null {
-  const json = parseJsonText(raw);
-  if (!json.ok) return null;
-  const user = UserSchema.safeParse(json.data);
-  return user.success ? user.data : null;
+function emailKey(email: string): KvKey {
+  return [...EMAIL_PREFIX, email.toLowerCase()];
 }
 
-/** Writes the record, then its index entry (so a listed user can always be fetched). */
-export async function saveUser(kv: KvStore, user: User): Promise<void> {
-  const value = JSON.stringify(user);
-  await kv.set(userKey(user.id), value);
-  await kv.set(newestFirstKey(user), value);
-}
-
-export async function findUser(kv: KvStore, id: string): Promise<User | null> {
+async function findInKv(kv: KvStore, id: string): Promise<User | null> {
   const raw = await kv.get(userKey(id));
   return raw === null ? null : decodeUser(raw);
 }
 
-/** The newest `limit` users, newest first. */
-export async function listUsers(kv: KvStore, limit: number): Promise<User[]> {
-  const entries = await kv.list(NEWEST_FIRST_PREFIX, limit);
-  return entries.map((entry) => decodeUser(entry.value)).filter((user): user is User => user !== null);
-}
-
-/** Removes the index entry, then the record. Resolves to `false` when there was no such user. */
-export async function deleteUser(kv: KvStore, id: string): Promise<boolean> {
-  const user = await findUser(kv, id);
-  if (user === null) return false;
-  await kv.delete(newestFirstKey(user));
-  await kv.delete(userKey(id));
-  return true;
+export function createKvUserStore(kv: KvStore): UserStore {
+  return {
+    // Claims the email first; then writes the record before its index entry,
+    // so a listed user can always be fetched.
+    create: async (user) => {
+      if (!(await kv.setIfAbsent(emailKey(user.email), user.id))) return "email_taken";
+      const value = JSON.stringify(user);
+      await kv.set(userKey(user.id), value);
+      await kv.set(newestFirstKey(user), value);
+      return "created";
+    },
+    find: (id) => findInKv(kv, id),
+    listNewest: async (limit) => {
+      const entries = await kv.list(NEWEST_FIRST_PREFIX, limit);
+      return entries.map((entry) => decodeUser(entry.value)).filter(isUser);
+    },
+    // Reverse order of `create`: the email is released last.
+    delete: async (id) => {
+      const user = await findInKv(kv, id);
+      if (user === null) return false;
+      await kv.delete(newestFirstKey(user));
+      await kv.delete(userKey(id));
+      await kv.delete(emailKey(user.email));
+      return true;
+    },
+  };
 }

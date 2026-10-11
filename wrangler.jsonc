@@ -16,9 +16,11 @@
     "not_found_handling": "none"
   },
 
-  // Create with: npx wrangler@4 kv namespace create USERS_KV
-  "kv_namespaces": [
-    { "binding": "USERS_KV", "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }
+  // User records. No database_id on purpose: `wrangler deploy` (4.45+) links the
+  // existing database with this name, or creates it on the first deploy. The
+  // users table is created on first use (see src/adapters/worker.ts).
+  "d1_databases": [
+    { "binding": "DB", "database_name": "cf-app-v2" }
   ],
 
   // Non-secret config. Set secrets with: npx wrangler@4 secret put ADMIN_TOKEN

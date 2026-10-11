@@ -50,6 +50,10 @@ export function notFound(message = "Not Found"): Response {
   return errorResponse(404, "not_found", message);
 }
 
+export function conflict(code: string, message: string): Response {
+  return errorResponse(409, code, message);
+}
+
 export function methodNotAllowed(allow: readonly string[]): Response {
   return errorResponse(405, "method_not_allowed", "Method Not Allowed", {}, { allow: allow.join(", ") });
 }
